@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>NeuroForge // Cognitive Dashboard</title>
+  <meta name="description" content="NeuroForge cognitive training dashboard" />
+  <link rel="stylesheet" href="./style.css" />
+</head>
+
+<body>
+  <div class="bg-grid" aria-hidden="true"></div>
+  <div class="bg-noise" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">🧠⚙️</div>
+      <div class="brandtext">
+        <div class="title">NeuroForge</div>
+        <div class="subtitle">kawaii-cyberpunk mind gym // v1.0</div>
+      </div>
+    </div>
+
+    <div class="top-actions">
+      <button class="btn btn-ghost" id="btnExport" title="Export your data as JSON">
+        Export
+      </button>
+      <button class="btn btn-ghost" id="btnReset" title="Reset local data (baseline + logs)">
+        Reset
+      </button>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="panel hero">
+      <div class="hero-left">
+        <div class="badge">⚡ Training Mode</div>
+        <h1>Skill Tree Dashboard</h1>
+        <p>
+          Track your baselines, run quick daily challenges, and watch your stats climb.
+          No cringe. Only XP. 🧃
+        </p>
+
+        <div class="controls">
+          <button class="btn btn-primary" id="btnDaily">🎲 Daily Neural Roll</button>
+          <button class="btn btn-secondary" id="btnTri">🧩 Tri-Skill Sprint</button>
+          <button class="btn btn-secondary" id="btnFull">🧠 Full Circuit</button>
+        </div>
+
+        <div class="minirow">
+          <div class="chip">
+            <span class="chip-label">Today’s Focus</span>
+            <span class="chip-value" id="todayFocus">—</span>
+          </div>
+          <div class="chip">
+            <span class="chip-label">Total Sessions</span>
+            <span class="chip-value" id="totalSessions">0</span>
+          </div>
+          <div class="chip">
+            <span class="chip-label">XP</span>
+            <span class="chip-value" id="xpTotal">0</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="hero-right">
+        <div class="orb">
+          <div class="orb-inner"></div>
+          <div class="orb-spark s1"></div>
+          <div class="orb-spark s2"></div>
+          <div class="orb-spark s3"></div>
+        </div>
+
+        <div class="retest">
+          <div class="retest-title">🔁 Quick Re-test</div>
+          <div class="retest-row">
+            <select id="retestSelect" class="select">
+              <option value="">Choose a category…</option>
+            </select>
+            <button class="btn btn-ghost" id="btnRetest">Re-test</button>
+          </div>
+          <div class="hint">Re-tests are mini checkups. Your baselines stay unless you overwrite them.</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="grid">
+      <section class="panel">
+        <div class="panel-header">
+          <h2>📌 Baselines</h2>
+          <div class="panel-sub">Stored locally in your browser</div>
+        </div>
+
+        <div class="skills" id="skillsGrid"></div>
+
+        <div class="panel-footer">
+          <button class="btn btn-ghost" id="btnEditBaseline">Edit Baselines</button>
+          <span class="footnote">Tip: keep it honest. Your future self wants clean data.</span>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>🗒️ Session Log</h2>
+          <div class="panel-sub">What you trained + your results</div>
+        </div>
+
+        <div class="log" id="log"></div>
+
+        <div class="panel-footer">
+          <button class="btn btn-ghost" id="btnClearLog">Clear Log</button>
+          <span class="footnote">Logs persist via localStorage.</span>
+        </div>
+      </section>
+    </section>
+
+    <footer class="footer">
+      <div>Built for chaos-smart brains 💗🦊</div>
+      <div class="tiny">NeuroForge v1.0 • local-only • GitHub Pages friendly</div>
+    </footer>
+  </main>
+
+  <dialog id="modal" class="modal">
+    <form method="dialog" class="modal-card">
+      <div class="modal-top">
+        <div class="modal-title" id="modalTitle">Modal</div>
+        <button class="btn btn-ghost btn-x" value="cancel" aria-label="Close">✕</button>
+      </div>
+
+      <div class="modal-body" id="modalBody"></div>
+
+      <div class="modal-actions">
+        <button class="btn btn-ghost" value="cancel">Cancel</button>
+        <button class="btn btn-primary" id="modalConfirm" value="default">Confirm</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="./app.js"></script>
+</body>
+</html>
