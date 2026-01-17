@@ -102,13 +102,7 @@
       <div class="hero-right">
 
         <!-- =========================================
-          MISSION CONSOLE (replaces the old "orb")
-          Purpose:
-            - Paste Echo's challenge prompt
-            - Write your answers / notes
-            - Add quick metrics (mood/sleep/difficulty/enjoyed)
-            - Mark complete to earn XP
-            - Save updates into the newest log entry
+          MISSION CONSOLE
         ========================================== -->
         <div class="console" id="missionConsole">
           <div class="console-title">🛰️ Mission Console</div>
@@ -119,7 +113,12 @@
               <div class="console-label">Echo’s Challenge (paste from chat)</div>
               <textarea
                 id="challengeText"
-                placeholder="Paste today's puzzle/lesson here..."
+                placeholder="Paste today’s Training Pack (Step 1–4) here...
+Step 1) Mini puzzle warm-up (with solutions hidden until you answer)
+Step 2) Micro-lesson + tips/tricks + media snack
+Step 3) Quick quiz
+Step 4) Reflection prompt
+(Then Echo sends insight + homework drills after you respond.)"
               ></textarea>
             </div>
 
@@ -127,19 +126,14 @@
               <div class="console-label">My Answer / Notes</div>
               <textarea
                 id="answerText"
-                placeholder="Type your answers, notes, tricks, mistakes, wins..."
+                placeholder="Put your answers + reasoning here. Use clear headings if you want."
               ></textarea>
 
-              <div class="console-row">
-                <label class="check">
-                  <input type="checkbox" id="completeToggle" />
-                  Mark complete (earn XP)
-                </label>
-
-                <button class="btn btn-ghost" id="btnSaveConsole">
-                  Save to Latest Entry
-                </button>
-              </div>
+              <div class="console-label" style="margin-top:10px;">Insights (separate)</div>
+              <textarea
+                id="insightText"
+                placeholder="Add your takeaways here (what went wrong/right, patterns you notice, what to change next time)."
+              ></textarea>
 
               <div class="console-metrics">
                 <div class="metric">
@@ -188,16 +182,27 @@
                   </select>
                 </div>
               </div>
+
+              <div class="console-row">
+                <label class="check">
+                  <input type="checkbox" id="completeToggle" />
+                  Mark complete (earn XP)
+                </label>
+
+                <div class="saveWrap">
+                  <button class="btn btn-ghost" id="btnSaveConsole">
+                    Save to Latest Entry
+                  </button>
+                  <div class="saveStatus" id="saveStatus" aria-live="polite"></div>
+                </div>
+              </div>
+
             </div>
           </div>
         </div>
 
         <!-- =========================================
           QUICK RE-TEST
-          Purpose:
-            - Select one baseline category
-            - Enter a new score
-            - Optionally overwrite baseline
         ========================================== -->
         <div class="retest">
           <div class="retest-title">🔁 Quick Re-test</div>
@@ -219,8 +224,6 @@
 
     <!-- =========================================
       MAIN GRID
-      Left: Baselines
-      Right: Session Log
     ========================================== -->
     <section class="grid">
 
@@ -265,7 +268,7 @@
   </main>
 
   <!-- =========================================
-    Shared Modal (used for retest, edit baselines, reset menu, etc.)
+    Shared Modal
   ========================================== -->
   <dialog id="modal" class="modal">
     <form method="dialog" class="modal-card">

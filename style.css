@@ -1,18 +1,5 @@
 /* =========================================================
   NeuroForge // style.css
-  Kawaii-cyberpunk / FateL00p-ish UI
-  Sections:
-    01) Theme Variables
-    02) Base / Layout
-    03) Background FX
-    04) Topbar / Header
-    05) Panels + Hero Layout
-    06) Buttons + Inputs
-    07) Baseline Skills
-    08) Session Log
-    09) Modal
-    10) Mission Console (new)
-    11) Responsive
 ========================================================= */
 
 /* ---------------------------------------------------------
@@ -239,52 +226,6 @@ h1{
 }
 
 /* ---------------------------------------------------------
-  06) (LEGACY) ORB (not used once console is installed)
-  You can delete this later if you want.
---------------------------------------------------------- */
-.orb{
-  height:180px;
-  border-radius:22px;
-  border:1px solid #ffffff1f;
-
-  background:
-    radial-gradient(circle at 30% 30%, #ff5fd744, transparent 50%),
-    radial-gradient(circle at 70% 60%, #44ffd744, transparent 52%),
-    radial-gradient(circle at 50% 50%, #9c6bff22, transparent 60%),
-    linear-gradient(180deg, #00000022, #00000033);
-
-  position:relative;
-  overflow:hidden;
-}
-
-.orb-inner{
-  position:absolute;
-  inset:20px;
-  border-radius:18px;
-  border:1px dashed #ffffff2a;
-  filter: drop-shadow(0 0 18px #ff5fd71a);
-  animation: floaty 6s ease-in-out infinite;
-}
-
-.orb-spark{
-  position:absolute;
-  width:140px;
-  height:140px;
-  border-radius: 999px;
-  filter: blur(18px);
-  opacity:.7;
-  mix-blend-mode:screen;
-  animation: drift 8s ease-in-out infinite;
-}
-
-.orb-spark.s1{ left:-40px; top:18px; background:#ff5fd75a; }
-.orb-spark.s2{ right:-40px; top:40px; background:#44ffd75a; animation-delay:-2s; }
-.orb-spark.s3{ left:40px; bottom:-55px; background:#39b6ff4a; animation-delay:-4s; }
-
-@keyframes floaty{ 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
-@keyframes drift{ 0%,100%{transform:translate(0,0)} 50%{transform:translate(16px,-10px)} }
-
-/* ---------------------------------------------------------
   07) QUICK RE-TEST
 --------------------------------------------------------- */
 .retest{
@@ -450,6 +391,35 @@ h1{
   font-size:13px;
 }
 
+.entry-section{
+  margin-top:10px;
+  padding:10px;
+  border-radius:14px;
+  border:1px solid #ffffff12;
+  background:#00000018;
+}
+
+.entry-label{
+  font-family:var(--mono);
+  font-size:12px;
+  color:#d9d5ff;
+  font-weight:900;
+  letter-spacing:.2px;
+  margin-bottom:6px;
+  display:flex;
+  gap:8px;
+  align-items:center;
+}
+
+.entry-text{
+  font-family:var(--mono);
+  font-size:12px;
+  line-height:1.45;
+  color:var(--muted);
+  white-space:pre-wrap;
+  word-break:break-word;
+}
+
 .tagrow{
   margin-top:10px;
   display:flex;
@@ -464,6 +434,11 @@ h1{
   border-radius:999px;
   border:1px solid #ffffff1f;
   background:#ffffff10;
+}
+
+.tag-metric{
+  opacity:.9;
+  border-style:dashed;
 }
 
 /* ---------------------------------------------------------
@@ -500,6 +475,11 @@ h1{
 
 .btn-ghost{ background:#0000001a; }
 .btn-x{ padding:8px 10px; border-radius:12px; }
+
+.btn-saved{
+  transform: translateY(1px);
+  filter: brightness(1.15);
+}
 
 /* ---------------------------------------------------------
   13) FOOTER
@@ -563,10 +543,10 @@ h1{
   border-top:1px solid #ffffff12;
 }
 
-/* Shared textarea styling (used in modal + console) */
+/* Shared textarea styling */
 textarea{
   width:100%;
-  min-height: 220px;
+  min-height: 190px;
   resize: vertical;
   padding:12px;
 
@@ -580,7 +560,7 @@ textarea{
 }
 
 /* ---------------------------------------------------------
-  15) MISSION CONSOLE (new feature)
+  15) MISSION CONSOLE
 --------------------------------------------------------- */
 .console{
   height:auto;
@@ -625,10 +605,10 @@ textarea{
 
 .console-row{
   display:flex;
-  align-items:center;
+  align-items:flex-end;
   justify-content:space-between;
   gap:10px;
-  margin-top:10px;
+  margin-top:12px;
   flex-wrap:wrap;
 }
 
@@ -664,6 +644,20 @@ textarea{
   border:1px solid #ffffff1f;
   color:var(--txt);
   font-family:var(--mono);
+}
+
+.saveWrap{
+  display:flex;
+  flex-direction:column;
+  align-items:flex-end;
+  gap:6px;
+}
+
+.saveStatus{
+  font-family:var(--mono);
+  font-size:12px;
+  color:var(--muted);
+  min-height:16px;
 }
 
 /* ---------------------------------------------------------

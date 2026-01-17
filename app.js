@@ -6,7 +6,8 @@
     - Run training modes (Daily / Tri / Full)
     - Mission Console:
         * paste challenge
-        * write notes
+        * write answers
+        * add insights (separate)
         * add metrics (mood/sleep/difficulty/enjoyed)
         * mark complete to earn XP
         * save into the newest log entry
@@ -86,7 +87,6 @@ function loadState(){
 
     const parsed = JSON.parse(raw);
 
-    // Merge older saved state into defaults so missing keys won't break things
     const st = {
       ...structuredCloneSafe(DEFAULT_STATE),
       ...parsed,
@@ -95,11 +95,7 @@ function loadState(){
       log: Array.isArray(parsed.log) ? parsed.log : []
     };
 
-    // MIGRATION:
-    // Older entries may have had "xp" stored directly.
-    // We normalize to:
-    //   - xpPotential (how much XP you COULD earn)
-    //   - completed (whether XP is actually earned)
+    // MIGRATION / NORMALIZATION
     st.log = st.log.map(e => {
       const out = { ...e };
 
@@ -108,20 +104,21 @@ function loadState(){
       }
 
       if(typeof out.completed !== "boolean"){
-        // In older model XP existed immediately, so assume "completed"
         out.completed = true;
       }
 
       delete out.xp;
 
-      // Ensure the newer fields exist
       out.xpPotential = typeof out.xpPotential === "number" ? out.xpPotential : 0;
+
       out.mood ??= "";
       out.sleepHrs ??= "";
       out.difficulty ??= "";
       out.liked ??= "";
+
       out.challengeText ??= "";
       out.answerText ??= "";
+      out.insightText ??= ""; // NEW: Insights field
 
       return out;
     });
@@ -180,15 +177,25 @@ function formatScore(n){
 /* ---------------------------------------------------------
   03) DERIVED VALUES (EARNED XP, etc.)
 --------------------------------------------------------- */
-/**
- * Earned XP model:
- * - Only counts XP for log entries marked completed=true
- */
 function calcXP(){
   return state.log.reduce((sum, e) => {
     const earned = e.completed ? (Number(e.xpPotential) || 0) : 0;
     return sum + earned;
   }, 0);
+}
+
+function setSaveStatus(msg){
+  const el = $("saveStatus");
+  if(!el) return;
+  el.textContent = msg || "";
+}
+
+function pulseSaveButton(){
+  const btn = $("btnSaveConsole");
+  if(!btn) return;
+
+  btn.classList.add("btn-saved");
+  window.setTimeout(() => btn.classList.remove("btn-saved"), 180);
 }
 
 /* ---------------------------------------------------------
@@ -229,19 +236,21 @@ function renderSkills(){
  */
 function entryToClipboardText(e){
   const cats = (e.categories || []).join(", ");
+  const earned = e.completed ? (Number(e.xpPotential) || 0) : 0;
 
   const lines = [
     `${e.title}`,
     `${e.time}`,
     `Rolled: ${cats}`,
     `Completed: ${e.completed ? "Yes" : "No"}`,
-    `XP: ${e.completed ? e.xpPotential : 0} / ${e.xpPotential}`,
+    `XP: ${earned} / ${Number(e.xpPotential) || 0}`,
     e.mood ? `Mood: ${e.mood}` : "",
     e.sleepHrs !== "" ? `Sleep: ${e.sleepHrs} hrs` : "",
     e.difficulty ? `Difficulty: ${e.difficulty}` : "",
     e.liked ? `Enjoyed: ${e.liked}` : "",
     e.challengeText ? `\nChallenge:\n${e.challengeText}` : "",
-    e.answerText ? `\nAnswer/Notes:\n${e.answerText}` : ""
+    e.answerText ? `\nAnswers / Notes:\n${e.answerText}` : "",
+    e.insightText ? `\nInsights:\n${e.insightText}` : ""
   ].filter(Boolean);
 
   return lines.join("\n");
@@ -269,6 +278,14 @@ function renderLog(){
     const entry = document.createElement("div");
     entry.className = "entry";
     const cats = (e.categories || []);
+    const earned = e.completed ? (Number(e.xpPotential) || 0) : 0;
+
+    const metricTags = [
+      e.mood ? `<span class="tag tag-metric">Mood: ${escapeHtml(e.mood)}</span>` : "",
+      e.sleepHrs !== "" ? `<span class="tag tag-metric">Sleep: ${escapeHtml(e.sleepHrs)}h</span>` : "",
+      e.difficulty ? `<span class="tag tag-metric">Diff: ${escapeHtml(e.difficulty)}</span>` : "",
+      e.liked ? `<span class="tag tag-metric">Enjoyed: ${escapeHtml(e.liked)}</span>` : ""
+    ].filter(Boolean).join("");
 
     entry.innerHTML = `
       <div class="entry-top">
@@ -278,7 +295,6 @@ function renderLog(){
         </div>
 
         <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-          <!-- Complete toggle -->
           <label class="tag" style="cursor:pointer;">
             <input
               data-action="toggleComplete"
@@ -290,7 +306,6 @@ function renderLog(){
             Complete
           </label>
 
-          <!-- Per-entry actions -->
           <button class="btn btn-ghost" data-action="copy" data-id="${e.id}">Copy</button>
           <button class="btn btn-ghost" data-action="edit" data-id="${e.id}">Edit</button>
           <button class="btn btn-ghost" data-action="delete" data-id="${e.id}">🗑️</button>
@@ -299,12 +314,30 @@ function renderLog(){
 
       <div class="entry-body">
         ${cats.length ? `Rolled: ${escapeHtml(cats.join(", "))}` : ""}
-        ${e.answerText ? `<br><br><b>Notes:</b><br>${escapeHtml(e.answerText)}` : ""}
+
+        ${e.challengeText ? `
+          <div class="entry-section">
+            <div class="entry-label">🛰️ Challenge</div>
+            <div class="entry-text">${escapeHtml(e.challengeText)}</div>
+          </div>` : ""}
+
+        ${e.answerText ? `
+          <div class="entry-section">
+            <div class="entry-label">✍️ Answers / Notes</div>
+            <div class="entry-text">${escapeHtml(e.answerText)}</div>
+          </div>` : ""}
+
+        ${e.insightText ? `
+          <div class="entry-section">
+            <div class="entry-label">🔎 Insights</div>
+            <div class="entry-text">${escapeHtml(e.insightText)}</div>
+          </div>` : ""}
       </div>
 
       <div class="tagrow">
         ${cats.map(c => `<span class="tag">#${escapeHtml(c)}</span>`).join("")}
-        <span class="tag">${e.completed ? "+" + Number(e.xpPotential || 0) : "+0"} XP</span>
+        ${metricTags}
+        <span class="tag">${"+" + earned} XP</span>
       </div>
     `;
 
@@ -314,8 +347,6 @@ function renderLog(){
 
 function renderRetestOptions(){
   const sel = $("retestSelect");
-
-  // Prevent duplicates on re-render
   if(sel.options.length > 1) return;
 
   for(const c of Object.keys(state.baselines)){
@@ -334,11 +365,25 @@ function renderConsole(){
       ? `Loaded: ${state.todayFocus}`
       : "No roll yet. Tap a mode above.";
 
-  // Keep the console "complete" checkbox synced to newest entry (so it feels sane)
   if(state.log.length){
-    $("completeToggle").checked = !!state.log[0].completed;
+    const latest = state.log[0];
+
+    // Keep console checkbox in sync
+    $("completeToggle").checked = !!latest.completed;
+
+    // Populate console fields from latest entry (so save/edit feels real)
+    $("challengeText").value = latest.challengeText || "";
+    $("answerText").value = latest.answerText || "";
+    const insightEl = $("insightText");
+    if(insightEl) insightEl.value = latest.insightText || "";
+
+    $("moodSel").value = latest.mood || "";
+    $("sleepHrs").value = latest.sleepHrs ?? "";
+    $("diffSel").value = latest.difficulty || "";
+    $("likeSel").value = latest.liked || "";
   }else{
     $("completeToggle").checked = false;
+    setSaveStatus("");
   }
 }
 
@@ -392,16 +437,15 @@ function addLogEntry({ title, categories, xpPotential }){
     xpPotential: Number(xpPotential || 0),
     completed: false,
 
-    // Console data
     mood: "",
     sleepHrs: "",
     difficulty: "",
     liked: "",
     challengeText: "",
-    answerText: ""
+    answerText: "",
+    insightText: "" // NEW
   };
 
-  // Newest first
   state.log.unshift(entry);
   render();
 }
@@ -414,7 +458,7 @@ function runSession(kind, count){
   const xpPotential =
     kind === "Daily Neural Roll" ? 10 :
     kind === "Tri-Skill Sprint" ? 18 :
-    25; // Full Circuit
+    25;
 
   addLogEntry({ title: kind, categories: pick, xpPotential });
 }
@@ -460,7 +504,6 @@ function quickRetest(category){
         xpPotential: 6
       });
 
-      // Re-tests: auto-complete, add a note to newest entry
       state.log[0].answerText =
         `Re-test score: ${formatScore(score)} / 10 (was ${formatScore(old)}). ` +
         (overwrite ? "Baseline updated." : "Baseline unchanged.");
@@ -566,10 +609,6 @@ function resetMenu(){
 /* ---------------------------------------------------------
   07) MISSION CONSOLE ACTIONS
 --------------------------------------------------------- */
-/**
- * Save console fields into the newest log entry.
- * This is the "Mission Console -> Save to Latest Entry" button.
- */
 function saveConsoleToLatest(){
   if(!state.log.length){
     alert("No session entry yet. Roll a mode first.");
@@ -580,6 +619,7 @@ function saveConsoleToLatest(){
 
   latest.challengeText = $("challengeText").value || "";
   latest.answerText = $("answerText").value || "";
+  latest.insightText = $("insightText") ? ($("insightText").value || "") : "";
 
   latest.mood = $("moodSel").value || "";
   latest.sleepHrs = $("sleepHrs").value || "";
@@ -587,6 +627,22 @@ function saveConsoleToLatest(){
   latest.liked = $("likeSel").value || "";
 
   latest.completed = $("completeToggle").checked;
+
+  // Immediate feedback
+  pulseSaveButton();
+  setSaveStatus("Saved ✅");
+
+  // Clear the console inputs after save (as requested)
+  $("answerText").value = "";
+  if($("insightText")) $("insightText").value = "";
+  $("moodSel").value = "";
+  $("sleepHrs").value = "";
+  $("diffSel").value = "";
+  $("likeSel").value = "";
+
+  // Keep challenge text (usually you want it there while working),
+  // but you can clear it too if you'd rather:
+  // $("challengeText").value = "";
 
   render();
 }
@@ -604,7 +660,6 @@ function handleLogAction(ev){
   const entry = state.log.find(e => e.id === id);
   if(!entry) return;
 
-  // ---- Copy ----
   if(action === "copy"){
     const text = entryToClipboardText(entry);
 
@@ -615,7 +670,6 @@ function handleLogAction(ev){
     return;
   }
 
-  // ---- Delete ----
   if(action === "delete"){
     openModal({
       title: "Delete this entry?",
@@ -629,18 +683,27 @@ function handleLogAction(ev){
     return;
   }
 
-  // ---- Edit ----
   if(action === "edit"){
     openModal({
-      title: "Edit Notes / Metrics",
+      title: "Edit Entry (Challenge / Notes / Insights / Metrics)",
       confirmText: "Save",
       bodyHtml: `
         <p>Edit this session entry:</p>
 
         <label style="display:block;margin:10px 0 6px;color:#c7c2ffcc;font-family:var(--mono);font-size:12px;">
-          Notes
+          Challenge
+        </label>
+        <textarea id="editChallenge">${escapeHtml(entry.challengeText || "")}</textarea>
+
+        <label style="display:block;margin:10px 0 6px;color:#c7c2ffcc;font-family:var(--mono);font-size:12px;">
+          Answers / Notes
         </label>
         <textarea id="editNotes">${escapeHtml(entry.answerText || "")}</textarea>
+
+        <label style="display:block;margin:10px 0 6px;color:#c7c2ffcc;font-family:var(--mono);font-size:12px;">
+          Insights
+        </label>
+        <textarea id="editInsights">${escapeHtml(entry.insightText || "")}</textarea>
 
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;">
           <div>
@@ -665,7 +728,9 @@ function handleLogAction(ev){
         </div>
       `,
       onConfirm: () => {
+        entry.challengeText = document.getElementById("editChallenge").value || "";
         entry.answerText = document.getElementById("editNotes").value || "";
+        entry.insightText = document.getElementById("editInsights").value || "";
         entry.mood = document.getElementById("editMood").value || "";
         entry.sleepHrs = document.getElementById("editSleep").value || "";
         entry.difficulty = document.getElementById("editDiff").value || "";
@@ -676,10 +741,6 @@ function handleLogAction(ev){
   }
 }
 
-/**
- * Handles the per-entry "Complete" checkbox in the log list.
- * Earned XP updates immediately because calcXP() is derived.
- */
 function handleCompleteToggle(ev){
   const cb = ev.target;
   if(!(cb instanceof HTMLInputElement)) return;
@@ -698,22 +759,18 @@ function handleCompleteToggle(ev){
 --------------------------------------------------------- */
 let state = loadState();
 
-// Training modes
 $("btnDaily").addEventListener("click", () => runSession("Daily Neural Roll", 1));
 $("btnTri").addEventListener("click", () => runSession("Tri-Skill Sprint", 3));
 $("btnFull").addEventListener("click", () => runSession("Full Circuit", 5));
 
-// Retest
 $("btnRetest").addEventListener("click", () => {
   const cat = $("retestSelect").value;
   if(!cat) return;
   quickRetest(cat);
 });
 
-// Baselines edit
 $("btnEditBaseline").addEventListener("click", editBaselines);
 
-// Clear log (preserve baselines)
 $("btnClearLog").addEventListener("click", () => {
   openModal({
     title: "Clear session log?",
@@ -726,16 +783,12 @@ $("btnClearLog").addEventListener("click", () => {
   });
 });
 
-// Export / Reset
 $("btnExport").addEventListener("click", exportData);
 $("btnReset").addEventListener("click", resetMenu);
 
-// Mission Console save
 $("btnSaveConsole").addEventListener("click", saveConsoleToLatest);
 
-// Log interaction (delegated)
 $("log").addEventListener("click", handleLogAction);
 $("log").addEventListener("change", handleCompleteToggle);
 
-// Initial render
 render();
