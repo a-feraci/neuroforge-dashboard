@@ -1,20 +1,38 @@
 <!doctype html>
 <html lang="en">
 <head>
+  <!-- =========================================
+    NeuroForge // Cognitive Dashboard (GitHub Pages friendly)
+    Files:
+      - index.html (layout)
+      - style.css  (styles)
+      - app.js     (logic + localStorage)
+  ========================================== -->
+
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
+
   <title>NeuroForge // Cognitive Dashboard</title>
   <meta name="description" content="NeuroForge cognitive training dashboard" />
+
+  <!-- Styles -->
   <link rel="stylesheet" href="./style.css" />
 </head>
 
 <body>
+  <!-- =========================================
+    Background FX layers (purely visual)
+  ========================================== -->
   <div class="bg-grid" aria-hidden="true"></div>
   <div class="bg-noise" aria-hidden="true"></div>
 
+  <!-- =========================================
+    Top Navigation / Header
+  ========================================== -->
   <header class="topbar">
     <div class="brand">
       <div class="logo">🧠⚙️</div>
+
       <div class="brandtext">
         <div class="title">NeuroForge</div>
         <div class="subtitle">kawaii-cyberpunk mind gym // v1.0</div>
@@ -25,37 +43,54 @@
       <button class="btn btn-ghost" id="btnExport" title="Export your data as JSON">
         Export
       </button>
+
       <button class="btn btn-ghost" id="btnReset" title="Reset local data (baseline + logs)">
         Reset
       </button>
     </div>
   </header>
 
+  <!-- =========================================
+    Main Content Wrapper
+  ========================================== -->
   <main class="wrap">
+
+    <!-- =========================================
+      HERO PANEL
+      Left: mode buttons + quick stats
+      Right: Mission Console + Quick Re-test
+    ========================================== -->
     <section class="panel hero">
+      <!-- ---------- HERO LEFT ---------- -->
       <div class="hero-left">
         <div class="badge">⚡ Training Mode</div>
+
         <h1>Skill Tree Dashboard</h1>
+
         <p>
           Track your baselines, run quick daily challenges, and watch your stats climb.
           No cringe. Only XP. 🧃
         </p>
 
+        <!-- Mode Buttons -->
         <div class="controls">
           <button class="btn btn-primary" id="btnDaily">🎲 Daily Neural Roll</button>
           <button class="btn btn-secondary" id="btnTri">🧩 Tri-Skill Sprint</button>
           <button class="btn btn-secondary" id="btnFull">🧠 Full Circuit</button>
         </div>
 
+        <!-- Quick Stats -->
         <div class="minirow">
           <div class="chip">
             <span class="chip-label">Today’s Focus</span>
             <span class="chip-value" id="todayFocus">—</span>
           </div>
+
           <div class="chip">
             <span class="chip-label">Total Sessions</span>
             <span class="chip-value" id="totalSessions">0</span>
           </div>
+
           <div class="chip">
             <span class="chip-label">XP</span>
             <span class="chip-value" id="xpTotal">0</span>
@@ -63,28 +98,133 @@
         </div>
       </div>
 
+      <!-- ---------- HERO RIGHT ---------- -->
       <div class="hero-right">
-        <div class="orb">
-          <div class="orb-inner"></div>
-          <div class="orb-spark s1"></div>
-          <div class="orb-spark s2"></div>
-          <div class="orb-spark s3"></div>
+
+        <!-- =========================================
+          MISSION CONSOLE (replaces the old "orb")
+          Purpose:
+            - Paste Echo's challenge prompt
+            - Write your answers / notes
+            - Add quick metrics (mood/sleep/difficulty/enjoyed)
+            - Mark complete to earn XP
+            - Save updates into the newest log entry
+        ========================================== -->
+        <div class="console" id="missionConsole">
+          <div class="console-title">🛰️ Mission Console</div>
+          <div class="console-sub" id="consoleSub">No roll yet. Tap a mode above.</div>
+
+          <div class="console-grid">
+            <div class="console-box">
+              <div class="console-label">Echo’s Challenge (paste from chat)</div>
+              <textarea
+                id="challengeText"
+                placeholder="Paste today's puzzle/lesson here..."
+              ></textarea>
+            </div>
+
+            <div class="console-box">
+              <div class="console-label">My Answer / Notes</div>
+              <textarea
+                id="answerText"
+                placeholder="Type your answers, notes, tricks, mistakes, wins..."
+              ></textarea>
+
+              <div class="console-row">
+                <label class="check">
+                  <input type="checkbox" id="completeToggle" />
+                  Mark complete (earn XP)
+                </label>
+
+                <button class="btn btn-ghost" id="btnSaveConsole">
+                  Save to Latest Entry
+                </button>
+              </div>
+
+              <div class="console-metrics">
+                <div class="metric">
+                  <span>Mood</span>
+                  <select id="moodSel" class="select">
+                    <option value="">—</option>
+                    <option>😵‍💫</option>
+                    <option>😐</option>
+                    <option>🙂</option>
+                    <option>😈</option>
+                    <option>🧠✨</option>
+                  </select>
+                </div>
+
+                <div class="metric">
+                  <span>Sleep</span>
+                  <input
+                    id="sleepHrs"
+                    type="number"
+                    min="0"
+                    max="14"
+                    step="0.5"
+                    class="miniInput"
+                    placeholder="hrs"
+                  />
+                </div>
+
+                <div class="metric">
+                  <span>Difficulty</span>
+                  <select id="diffSel" class="select">
+                    <option value="">—</option>
+                    <option>Easy</option>
+                    <option>Medium</option>
+                    <option>Hard</option>
+                    <option>Boss Fight</option>
+                  </select>
+                </div>
+
+                <div class="metric">
+                  <span>Enjoyed?</span>
+                  <select id="likeSel" class="select">
+                    <option value="">—</option>
+                    <option>Yes</option>
+                    <option>Neutral</option>
+                    <option>No</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
+        <!-- =========================================
+          QUICK RE-TEST
+          Purpose:
+            - Select one baseline category
+            - Enter a new score
+            - Optionally overwrite baseline
+        ========================================== -->
         <div class="retest">
           <div class="retest-title">🔁 Quick Re-test</div>
+
           <div class="retest-row">
             <select id="retestSelect" class="select">
               <option value="">Choose a category…</option>
             </select>
+
             <button class="btn btn-ghost" id="btnRetest">Re-test</button>
           </div>
-          <div class="hint">Re-tests are mini checkups. Your baselines stay unless you overwrite them.</div>
+
+          <div class="hint">
+            Re-tests are mini checkups. Your baselines stay unless you overwrite them.
+          </div>
         </div>
       </div>
     </section>
 
+    <!-- =========================================
+      MAIN GRID
+      Left: Baselines
+      Right: Session Log
+    ========================================== -->
     <section class="grid">
+
+      <!-- ---------- BASELINES PANEL ---------- -->
       <section class="panel">
         <div class="panel-header">
           <h2>📌 Baselines</h2>
@@ -99,6 +239,7 @@
         </div>
       </section>
 
+      <!-- ---------- SESSION LOG PANEL ---------- -->
       <section class="panel">
         <div class="panel-header">
           <h2>🗒️ Session Log</h2>
@@ -114,12 +255,18 @@
       </section>
     </section>
 
+    <!-- =========================================
+      Footer
+    ========================================== -->
     <footer class="footer">
       <div>Built for chaos-smart brains 💗🦊</div>
       <div class="tiny">NeuroForge v1.0 • local-only • GitHub Pages friendly</div>
     </footer>
   </main>
 
+  <!-- =========================================
+    Shared Modal (used for retest, edit baselines, reset menu, etc.)
+  ========================================== -->
   <dialog id="modal" class="modal">
     <form method="dialog" class="modal-card">
       <div class="modal-top">
@@ -136,6 +283,7 @@
     </form>
   </dialog>
 
+  <!-- Logic -->
   <script src="./app.js"></script>
 </body>
 </html>

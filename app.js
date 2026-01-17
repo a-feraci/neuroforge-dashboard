@@ -1,14 +1,39 @@
-/* NeuroForge Dashboard v1.0
-   - Baselines + Log stored in localStorage
-   - Daily Roll / Tri Sprint / Full Circuit choose random categories
-*/
+/* =========================================================
+  NeuroForge // app.js
 
+  Purpose:
+    - Store baselines + session logs in localStorage
+    - Run training modes (Daily / Tri / Full)
+    - Mission Console:
+        * paste challenge
+        * write notes
+        * add metrics (mood/sleep/difficulty/enjoyed)
+        * mark complete to earn XP
+        * save into the newest log entry
+    - Session Log controls:
+        * per-entry copy to clipboard
+        * per-entry edit
+        * per-entry delete
+        * per-entry "Complete" toggle (earned XP model)
+
+  Sections:
+    01) Constants + Default State
+    02) Storage + Helpers
+    03) Derived Values (Earned XP, formatting)
+    04) Rendering (UI)
+    05) Modal System
+    06) Core Actions (sessions, retest, export, reset)
+    07) Mission Console Actions
+    08) Session Log Actions (copy/edit/delete/complete)
+    09) Event Wiring + Boot
+========================================================= */
+
+/* ---------------------------------------------------------
+  01) CONSTANTS + DEFAULT STATE
+--------------------------------------------------------- */
 const STORAGE_KEY = "neuroforge_v1";
 
 const DEFAULT_STATE = {
-  xp: 0,
-  sessions: 0,
-  todayFocus: "—",
   baselines: {
     "Focus & Attention": 6,
     "Working Memory": 8.5,
@@ -21,6 +46,7 @@ const DEFAULT_STATE = {
     "Pattern Recognition": 9,
     "Decision-Making Under Uncertainty": 8.5
   },
+
   notes: {
     "Focus & Attention": "Rotation ≠ hierarchy change. Guard against assumption drift.",
     "Working Memory": "Strong filter under interference.",
@@ -33,85 +59,152 @@ const DEFAULT_STATE = {
     "Pattern Recognition": "Standout strength. Use it everywhere.",
     "Decision-Making Under Uncertainty": "Good expected-value instincts."
   },
+
+  todayFocus: "—",
   log: []
 };
 
-function loadState(){
-  try{
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if(!raw) return structuredClone(DEFAULT_STATE);
-    const parsed = JSON.parse(raw);
-    // merge for forward compatibility
-    return {
-      ...structuredClone(DEFAULT_STATE),
-      ...parsed,
-      baselines: { ...structuredClone(DEFAULT_STATE.baselines), ...(parsed.baselines || {}) },
-      notes: { ...structuredClone(DEFAULT_STATE.notes), ...(parsed.notes || {}) },
-      log: Array.isArray(parsed.log) ? parsed.log : []
-    };
-  }catch{
-    return structuredClone(DEFAULT_STATE);
-  }
+/* ---------------------------------------------------------
+  02) STORAGE + HELPERS
+--------------------------------------------------------- */
+function structuredCloneSafe(x){
+  return JSON.parse(JSON.stringify(x));
+}
+
+function $(id){
+  return document.getElementById(id);
 }
 
 function saveState(){
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
-function $(id){ return document.getElementById(id); }
+function loadState(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(!raw) return structuredCloneSafe(DEFAULT_STATE);
 
-function clamp(n, min, max){ return Math.max(min, Math.min(max, n)); }
+    const parsed = JSON.parse(raw);
 
-function scoreToPct(score){ return clamp((score/10)*100, 0, 100); }
+    // Merge older saved state into defaults so missing keys won't break things
+    const st = {
+      ...structuredCloneSafe(DEFAULT_STATE),
+      ...parsed,
+      baselines: { ...structuredCloneSafe(DEFAULT_STATE.baselines), ...(parsed.baselines || {}) },
+      notes: { ...structuredCloneSafe(DEFAULT_STATE.notes), ...(parsed.notes || {}) },
+      log: Array.isArray(parsed.log) ? parsed.log : []
+    };
+
+    // MIGRATION:
+    // Older entries may have had "xp" stored directly.
+    // We normalize to:
+    //   - xpPotential (how much XP you COULD earn)
+    //   - completed (whether XP is actually earned)
+    st.log = st.log.map(e => {
+      const out = { ...e };
+
+      if(typeof out.xpPotential !== "number" && typeof out.xp === "number"){
+        out.xpPotential = out.xp;
+      }
+
+      if(typeof out.completed !== "boolean"){
+        // In older model XP existed immediately, so assume "completed"
+        out.completed = true;
+      }
+
+      delete out.xp;
+
+      // Ensure the newer fields exist
+      out.xpPotential = typeof out.xpPotential === "number" ? out.xpPotential : 0;
+      out.mood ??= "";
+      out.sleepHrs ??= "";
+      out.difficulty ??= "";
+      out.liked ??= "";
+      out.challengeText ??= "";
+      out.answerText ??= "";
+
+      return out;
+    });
+
+    return st;
+  }catch{
+    return structuredCloneSafe(DEFAULT_STATE);
+  }
+}
+
+function clamp(n, min, max){
+  return Math.max(min, Math.min(max, n));
+}
+
+function scoreToPct(score){
+  return clamp((score / 10) * 100, 0, 100);
+}
 
 function pickRandom(arr, count){
   const a = [...arr];
   const out = [];
+
   while(out.length < count && a.length){
-    const i = Math.floor(Math.random()*a.length);
-    out.push(a.splice(i,1)[0]);
+    const i = Math.floor(Math.random() * a.length);
+    out.push(a.splice(i, 1)[0]);
   }
+
   return out;
 }
 
 function nowStamp(){
   const d = new Date();
-  return d.toLocaleString(undefined, { year:"numeric", month:"short", day:"2-digit", hour:"2-digit", minute:"2-digit" });
+  return d.toLocaleString(undefined, {
+    year:"numeric",
+    month:"short",
+    day:"2-digit",
+    hour:"2-digit",
+    minute:"2-digit"
+  });
 }
 
-function addXP(amount){
-  state.xp = Math.max(0, (state.xp || 0) + amount);
+function escapeHtml(str){
+  return String(str)
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
 }
 
-function addLogEntry({title, categories, body, xp}){
-  state.sessions = (state.sessions || 0) + 1;
-  if(typeof xp === "number") addXP(xp);
-
-  const entry = {
-    id: crypto.randomUUID(),
-    time: nowStamp(),
-    title,
-    categories,
-    body,
-    xp: xp ?? 0
-  };
-  state.log.unshift(entry);
-  saveState();
-  render();
+function formatScore(n){
+  const s = Number(n);
+  return Number.isInteger(s) ? String(s) : String(s.toFixed(1));
 }
 
-function renderTop(){
+/* ---------------------------------------------------------
+  03) DERIVED VALUES (EARNED XP, etc.)
+--------------------------------------------------------- */
+/**
+ * Earned XP model:
+ * - Only counts XP for log entries marked completed=true
+ */
+function calcXP(){
+  return state.log.reduce((sum, e) => {
+    const earned = e.completed ? (Number(e.xpPotential) || 0) : 0;
+    return sum + earned;
+  }, 0);
+}
+
+/* ---------------------------------------------------------
+  04) RENDERING (UI)
+--------------------------------------------------------- */
+function setTopStats(){
   $("todayFocus").textContent = state.todayFocus || "—";
-  $("totalSessions").textContent = String(state.sessions || 0);
-  $("xpTotal").textContent = String(state.xp || 0);
+  $("totalSessions").textContent = String(state.log.length || 0);
+  $("xpTotal").textContent = String(calcXP());
 }
 
 function renderSkills(){
   const grid = $("skillsGrid");
   grid.innerHTML = "";
 
-  const entries = Object.entries(state.baselines);
-  for(const [name, score] of entries){
+  for(const [name, score] of Object.entries(state.baselines)){
     const pct = scoreToPct(score);
 
     const card = document.createElement("div");
@@ -126,8 +219,32 @@ function renderSkills(){
       </div>
       <div class="bar"><span style="width:${pct}%"></span></div>
     `;
+
     grid.appendChild(card);
   }
+}
+
+/**
+ * Convert one entry into a nice clipboard-friendly text block
+ */
+function entryToClipboardText(e){
+  const cats = (e.categories || []).join(", ");
+
+  const lines = [
+    `${e.title}`,
+    `${e.time}`,
+    `Rolled: ${cats}`,
+    `Completed: ${e.completed ? "Yes" : "No"}`,
+    `XP: ${e.completed ? e.xpPotential : 0} / ${e.xpPotential}`,
+    e.mood ? `Mood: ${e.mood}` : "",
+    e.sleepHrs !== "" ? `Sleep: ${e.sleepHrs} hrs` : "",
+    e.difficulty ? `Difficulty: ${e.difficulty}` : "",
+    e.liked ? `Enjoyed: ${e.liked}` : "",
+    e.challengeText ? `\nChallenge:\n${e.challengeText}` : "",
+    e.answerText ? `\nAnswer/Notes:\n${e.answerText}` : ""
+  ].filter(Boolean);
+
+  return lines.join("\n");
 }
 
 function renderLog(){
@@ -151,27 +268,57 @@ function renderLog(){
   for(const e of state.log){
     const entry = document.createElement("div");
     entry.className = "entry";
+    const cats = (e.categories || []);
+
     entry.innerHTML = `
       <div class="entry-top">
-        <div class="entry-title">${escapeHtml(e.title)}</div>
-        <div class="entry-time">${escapeHtml(e.time)}</div>
+        <div>
+          <div class="entry-title">${escapeHtml(e.title)}</div>
+          <div class="entry-time">${escapeHtml(e.time)}</div>
+        </div>
+
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+          <!-- Complete toggle -->
+          <label class="tag" style="cursor:pointer;">
+            <input
+              data-action="toggleComplete"
+              data-id="${e.id}"
+              type="checkbox"
+              ${e.completed ? "checked" : ""}
+              style="margin-right:8px;"
+            >
+            Complete
+          </label>
+
+          <!-- Per-entry actions -->
+          <button class="btn btn-ghost" data-action="copy" data-id="${e.id}">Copy</button>
+          <button class="btn btn-ghost" data-action="edit" data-id="${e.id}">Edit</button>
+          <button class="btn btn-ghost" data-action="delete" data-id="${e.id}">🗑️</button>
+        </div>
       </div>
-      <div class="entry-body">${escapeHtml(e.body || "")}</div>
+
+      <div class="entry-body">
+        ${cats.length ? `Rolled: ${escapeHtml(cats.join(", "))}` : ""}
+        ${e.answerText ? `<br><br><b>Notes:</b><br>${escapeHtml(e.answerText)}` : ""}
+      </div>
+
       <div class="tagrow">
-        ${(e.categories || []).map(c => `<span class="tag">#${escapeHtml(c)}</span>`).join("")}
-        <span class="tag">+${Number(e.xp || 0)} XP</span>
+        ${cats.map(c => `<span class="tag">#${escapeHtml(c)}</span>`).join("")}
+        <span class="tag">${e.completed ? "+" + Number(e.xpPotential || 0) : "+0"} XP</span>
       </div>
     `;
+
     logEl.appendChild(entry);
   }
 }
 
 function renderRetestOptions(){
   const sel = $("retestSelect");
-  const cats = Object.keys(state.baselines);
-  // only populate once
+
+  // Prevent duplicates on re-render
   if(sel.options.length > 1) return;
-  for(const c of cats){
+
+  for(const c of Object.keys(state.baselines)){
     const opt = document.createElement("option");
     opt.value = c;
     opt.textContent = c;
@@ -179,37 +326,46 @@ function renderRetestOptions(){
   }
 }
 
+function renderConsole(){
+  const sub = $("consoleSub");
+
+  sub.textContent =
+    state.todayFocus && state.todayFocus !== "—"
+      ? `Loaded: ${state.todayFocus}`
+      : "No roll yet. Tap a mode above.";
+
+  // Keep the console "complete" checkbox synced to newest entry (so it feels sane)
+  if(state.log.length){
+    $("completeToggle").checked = !!state.log[0].completed;
+  }else{
+    $("completeToggle").checked = false;
+  }
+}
+
+/**
+ * Master render:
+ * - updates UI
+ * - persists to localStorage
+ */
 function render(){
-  renderTop();
+  setTopStats();
   renderSkills();
   renderLog();
   renderRetestOptions();
+  renderConsole();
+  saveState();
 }
 
-function formatScore(n){
-  // show .5 if present
-  const s = Number(n);
-  return Number.isInteger(s) ? String(s) : String(s.toFixed(1));
-}
-
-function escapeHtml(str){
-  return String(str)
-    .replaceAll("&","&amp;")
-    .replaceAll("<","&lt;")
-    .replaceAll(">","&gt;")
-    .replaceAll('"',"&quot;")
-    .replaceAll("'","&#039;");
-}
-
-/* Modal helpers */
+/* ---------------------------------------------------------
+  05) MODAL SYSTEM
+--------------------------------------------------------- */
 const modal = $("modal");
 const modalTitle = $("modalTitle");
 const modalBody = $("modalBody");
 const modalConfirm = $("modalConfirm");
-
 let modalOnConfirm = null;
 
-function openModal({title, bodyHtml, confirmText="Confirm", onConfirm}){
+function openModal({ title, bodyHtml, confirmText = "Confirm", onConfirm }){
   modalTitle.textContent = title;
   modalBody.innerHTML = bodyHtml;
   modalConfirm.textContent = confirmText;
@@ -218,99 +374,129 @@ function openModal({title, bodyHtml, confirmText="Confirm", onConfirm}){
 }
 
 modal.addEventListener("close", () => {
-  const returnValue = modal.returnValue;
-  if(returnValue === "default" && typeof modalOnConfirm === "function"){
+  if(modal.returnValue === "default" && typeof modalOnConfirm === "function"){
     modalOnConfirm();
   }
   modalOnConfirm = null;
 });
 
-/* Training actions */
+/* ---------------------------------------------------------
+  06) CORE ACTIONS
+--------------------------------------------------------- */
+function addLogEntry({ title, categories, xpPotential }){
+  const entry = {
+    id: crypto.randomUUID(),
+    time: nowStamp(),
+    title,
+    categories,
+    xpPotential: Number(xpPotential || 0),
+    completed: false,
+
+    // Console data
+    mood: "",
+    sleepHrs: "",
+    difficulty: "",
+    liked: "",
+    challengeText: "",
+    answerText: ""
+  };
+
+  // Newest first
+  state.log.unshift(entry);
+  render();
+}
+
 function runSession(kind, count){
   const categories = Object.keys(state.baselines);
   const pick = pickRandom(categories, count);
   state.todayFocus = pick.join(" • ");
 
-  const xp = kind === "Daily Neural Roll" ? 10 : kind === "Tri-Skill Sprint" ? 18 : 25;
+  const xpPotential =
+    kind === "Daily Neural Roll" ? 10 :
+    kind === "Tri-Skill Sprint" ? 18 :
+    25; // Full Circuit
 
-  addLogEntry({
-    title: kind,
-    categories: pick,
-    body: `Rolled: ${pick.join(", ")}. (Go back to Echo for the actual puzzles 😈)`,
-    xp
-  });
+  addLogEntry({ title: kind, categories: pick, xpPotential });
 }
 
 function quickRetest(category){
-  // Minimal UI: user enters a new score, we store it as a log + (optional) baseline update
   openModal({
     title: `🔁 Re-test: ${category}`,
     confirmText: "Save",
     bodyHtml: `
-      <p>Enter your new score (0–10). This will log a re-test entry. You can also overwrite the baseline.</p>
-      <label style="display:block;margin:10px 0 6px;color:#c7c2ffcc;font-family:var(--mono);font-size:12px;">New score</label>
-      <input id="newScore" type="number" min="0" max="10" step="0.5"
-        style="width:100%;padding:10px 12px;border-radius:16px;border:1px solid #ffffff1f;background:#0a0c22;color:#f6f3ff;font-family:var(--mono);">
+      <p>Enter a new score (0–10). This logs a re-test entry. Optional baseline overwrite.</p>
+
+      <label style="display:block;margin:10px 0 6px;color:#c7c2ffcc;font-family:var(--mono);font-size:12px;">
+        New score
+      </label>
+
+      <input
+        id="newScore"
+        type="number"
+        min="0"
+        max="10"
+        step="0.5"
+        style="width:100%;padding:10px 12px;border-radius:16px;border:1px solid #ffffff1f;background:#0a0c22;color:#f6f3ff;font-family:var(--mono);"
+      >
+
       <label style="display:flex;gap:10px;align-items:center;margin-top:12px;color:#c7c2ffcc;font-family:var(--mono);font-size:12px;">
         <input id="overwrite" type="checkbox">
         Overwrite baseline with this score
       </label>
     `,
     onConfirm: () => {
-      const input = document.getElementById("newScore");
-      const overwrite = document.getElementById("overwrite");
-      const val = Number(input.value);
+      const val = Number(document.getElementById("newScore").value);
+      const overwrite = document.getElementById("overwrite").checked;
       if(Number.isNaN(val)) return;
 
       const score = clamp(val, 0, 10);
       const old = Number(state.baselines[category]);
 
-      if(overwrite && overwrite.checked){
-        state.baselines[category] = score;
-      }
+      if(overwrite) state.baselines[category] = score;
 
       addLogEntry({
         title: "Re-test",
         categories: [category],
-        body: `Re-test score: ${formatScore(score)} / 10 (was ${formatScore(old)}). ${overwrite && overwrite.checked ? "Baseline updated." : "Baseline unchanged."}`,
-        xp: 6
+        xpPotential: 6
       });
+
+      // Re-tests: auto-complete, add a note to newest entry
+      state.log[0].answerText =
+        `Re-test score: ${formatScore(score)} / 10 (was ${formatScore(old)}). ` +
+        (overwrite ? "Baseline updated." : "Baseline unchanged.");
+      state.log[0].completed = true;
+
+      render();
     }
   });
 }
 
 function editBaselines(){
   const json = JSON.stringify(state.baselines, null, 2);
+
   openModal({
     title: "📌 Edit Baselines (JSON)",
     confirmText: "Apply",
     bodyHtml: `
-      <p>Edit your baselines (0–10). Keep valid JSON. Example: <code>{"Working Memory": 8.5}</code></p>
+      <p>Edit baselines (0–10). Keep valid JSON.</p>
       <textarea id="baselineEditor">${escapeHtml(json)}</textarea>
-      <p style="margin-top:10px;font-size:12px;color:#c7c2ffcc;font-family:var(--mono);">
-        Pro tip: decimals allowed (step 0.5).
-      </p>
     `,
     onConfirm: () => {
       const txt = document.getElementById("baselineEditor").value;
+
       try{
         const obj = JSON.parse(txt);
-        // minimal validation
-        for(const [k,v] of Object.entries(obj)){
+
+        for(const [k, v] of Object.entries(obj)){
           const num = Number(v);
           if(Number.isNaN(num)) throw new Error("Non-number score found.");
           obj[k] = clamp(num, 0, 10);
         }
+
         state.baselines = obj;
-        saveState();
         render();
       }catch(e){
-        addLogEntry({
-          title: "⚠️ Baseline Edit Failed",
-          categories: [],
-          body: `Could not parse JSON: ${String(e.message || e)}`,
-          xp: 0
-        });
+        alert("Could not parse JSON: " + String(e.message || e));
       }
     }
   });
@@ -318,59 +504,238 @@ function editBaselines(){
 
 function exportData(){
   const data = JSON.stringify(state, null, 2);
-  const blob = new Blob([data], {type:"application/json"});
+  const blob = new Blob([data], { type: "application/json" });
   const url = URL.createObjectURL(blob);
+
   const a = document.createElement("a");
   a.href = url;
   a.download = "neuroforge-data.json";
   document.body.appendChild(a);
   a.click();
   a.remove();
+
   URL.revokeObjectURL(url);
 }
 
-function resetAll(){
+function resetMenu(){
   openModal({
-    title: "Reset NeuroForge?",
-    confirmText: "Yes, reset",
-    bodyHtml: `<p>This will wipe local baselines and logs on <b>this device/browser</b>.</p><p>Are you sure?</p>`,
+    title: "Reset options",
+    confirmText: "Apply",
+    bodyHtml: `
+      <p>Choose what to reset:</p>
+
+      <label style="display:flex;gap:10px;align-items:center;margin:10px 0;color:#c7c2ffcc;font-family:var(--mono);font-size:12px;">
+        <input id="rLog" type="checkbox"> Reset session log only
+      </label>
+
+      <label style="display:flex;gap:10px;align-items:center;margin:10px 0;color:#c7c2ffcc;font-family:var(--mono);font-size:12px;">
+        <input id="rBase" type="checkbox"> Reset baselines only
+      </label>
+
+      <label style="display:flex;gap:10px;align-items:center;margin:10px 0;color:#c7c2ffcc;font-family:var(--mono);font-size:12px;">
+        <input id="rAll" type="checkbox"> Reset EVERYTHING
+      </label>
+
+      <p style="font-size:12px;color:#c7c2ffcc;font-family:var(--mono);">
+        This affects only this browser/device.
+      </p>
+    `,
     onConfirm: () => {
-      state = structuredClone(DEFAULT_STATE);
-      saveState();
+      const rLog = document.getElementById("rLog").checked;
+      const rBase = document.getElementById("rBase").checked;
+      const rAll = document.getElementById("rAll").checked;
+
+      if(rAll){
+        state = structuredCloneSafe(DEFAULT_STATE);
+        render();
+        return;
+      }
+
+      if(rLog) state.log = [];
+
+      if(rBase){
+        state.baselines = structuredCloneSafe(DEFAULT_STATE.baselines);
+        state.notes = structuredCloneSafe(DEFAULT_STATE.notes);
+      }
+
       render();
     }
   });
 }
 
-/* Wire up */
+/* ---------------------------------------------------------
+  07) MISSION CONSOLE ACTIONS
+--------------------------------------------------------- */
+/**
+ * Save console fields into the newest log entry.
+ * This is the "Mission Console -> Save to Latest Entry" button.
+ */
+function saveConsoleToLatest(){
+  if(!state.log.length){
+    alert("No session entry yet. Roll a mode first.");
+    return;
+  }
+
+  const latest = state.log[0];
+
+  latest.challengeText = $("challengeText").value || "";
+  latest.answerText = $("answerText").value || "";
+
+  latest.mood = $("moodSel").value || "";
+  latest.sleepHrs = $("sleepHrs").value || "";
+  latest.difficulty = $("diffSel").value || "";
+  latest.liked = $("likeSel").value || "";
+
+  latest.completed = $("completeToggle").checked;
+
+  render();
+}
+
+/* ---------------------------------------------------------
+  08) SESSION LOG ACTIONS (COPY / EDIT / DELETE / COMPLETE)
+--------------------------------------------------------- */
+function handleLogAction(ev){
+  const btn = ev.target.closest("[data-action]");
+  if(!btn) return;
+
+  const action = btn.dataset.action;
+  const id = btn.dataset.id;
+
+  const entry = state.log.find(e => e.id === id);
+  if(!entry) return;
+
+  // ---- Copy ----
+  if(action === "copy"){
+    const text = entryToClipboardText(entry);
+
+    navigator.clipboard?.writeText(text).then(
+      () => alert("Copied to clipboard ✅"),
+      () => alert("Clipboard blocked by browser 😤 (try https or allow permissions)")
+    );
+    return;
+  }
+
+  // ---- Delete ----
+  if(action === "delete"){
+    openModal({
+      title: "Delete this entry?",
+      confirmText: "Delete",
+      bodyHtml: `<p>This removes only this one session log item.</p>`,
+      onConfirm: () => {
+        state.log = state.log.filter(e => e.id !== id);
+        render();
+      }
+    });
+    return;
+  }
+
+  // ---- Edit ----
+  if(action === "edit"){
+    openModal({
+      title: "Edit Notes / Metrics",
+      confirmText: "Save",
+      bodyHtml: `
+        <p>Edit this session entry:</p>
+
+        <label style="display:block;margin:10px 0 6px;color:#c7c2ffcc;font-family:var(--mono);font-size:12px;">
+          Notes
+        </label>
+        <textarea id="editNotes">${escapeHtml(entry.answerText || "")}</textarea>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;">
+          <div>
+            <div style="color:#c7c2ffcc;font-family:var(--mono);font-size:12px;margin-bottom:6px;">Mood</div>
+            <input id="editMood" class="miniInput" value="${escapeHtml(entry.mood || "")}" placeholder="😈 / 🙂 / etc">
+          </div>
+
+          <div>
+            <div style="color:#c7c2ffcc;font-family:var(--mono);font-size:12px;margin-bottom:6px;">Sleep (hrs)</div>
+            <input id="editSleep" class="miniInput" value="${escapeHtml(entry.sleepHrs ?? "")}" placeholder="7.5">
+          </div>
+
+          <div>
+            <div style="color:#c7c2ffcc;font-family:var(--mono);font-size:12px;margin-bottom:6px;">Difficulty</div>
+            <input id="editDiff" class="miniInput" value="${escapeHtml(entry.difficulty || "")}" placeholder="Easy/Hard/Boss Fight">
+          </div>
+
+          <div>
+            <div style="color:#c7c2ffcc;font-family:var(--mono);font-size:12px;margin-bottom:6px;">Enjoyed</div>
+            <input id="editLike" class="miniInput" value="${escapeHtml(entry.liked || "")}" placeholder="Yes/Neutral/No">
+          </div>
+        </div>
+      `,
+      onConfirm: () => {
+        entry.answerText = document.getElementById("editNotes").value || "";
+        entry.mood = document.getElementById("editMood").value || "";
+        entry.sleepHrs = document.getElementById("editSleep").value || "";
+        entry.difficulty = document.getElementById("editDiff").value || "";
+        entry.liked = document.getElementById("editLike").value || "";
+        render();
+      }
+    });
+  }
+}
+
+/**
+ * Handles the per-entry "Complete" checkbox in the log list.
+ * Earned XP updates immediately because calcXP() is derived.
+ */
+function handleCompleteToggle(ev){
+  const cb = ev.target;
+  if(!(cb instanceof HTMLInputElement)) return;
+  if(cb.dataset.action !== "toggleComplete") return;
+
+  const id = cb.dataset.id;
+  const entry = state.log.find(e => e.id === id);
+  if(!entry) return;
+
+  entry.completed = cb.checked;
+  render();
+}
+
+/* ---------------------------------------------------------
+  09) EVENT WIRING + BOOT
+--------------------------------------------------------- */
 let state = loadState();
 
+// Training modes
 $("btnDaily").addEventListener("click", () => runSession("Daily Neural Roll", 1));
 $("btnTri").addEventListener("click", () => runSession("Tri-Skill Sprint", 3));
 $("btnFull").addEventListener("click", () => runSession("Full Circuit", 5));
 
+// Retest
 $("btnRetest").addEventListener("click", () => {
   const cat = $("retestSelect").value;
   if(!cat) return;
   quickRetest(cat);
 });
 
+// Baselines edit
 $("btnEditBaseline").addEventListener("click", editBaselines);
 
+// Clear log (preserve baselines)
 $("btnClearLog").addEventListener("click", () => {
   openModal({
     title: "Clear session log?",
     confirmText: "Clear",
-    bodyHtml: `<p>This removes all session entries (baselines remain).</p>`,
+    bodyHtml: `<p>This clears only the session log. Baselines remain.</p>`,
     onConfirm: () => {
       state.log = [];
-      saveState();
       render();
     }
   });
 });
 
+// Export / Reset
 $("btnExport").addEventListener("click", exportData);
-$("btnReset").addEventListener("click", resetAll);
+$("btnReset").addEventListener("click", resetMenu);
 
+// Mission Console save
+$("btnSaveConsole").addEventListener("click", saveConsoleToLatest);
+
+// Log interaction (delegated)
+$("log").addEventListener("click", handleLogAction);
+$("log").addEventListener("change", handleCompleteToggle);
+
+// Initial render
 render();
